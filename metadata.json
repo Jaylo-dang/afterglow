@@ -1,0 +1,6 @@
+{
+  "name": "Afterglow",
+  "description": "Golden hour prediction and spot guide for Singapore sunrise and sunset photographers, with NASA Astronomy Picture of the Day.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
