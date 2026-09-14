@@ -330,7 +330,14 @@ for something I had written myself.
 
 ### Q6 — What does this mean for a team of thirty?
 
+### Q6 — What does this mean for a team of thirty?
+
+Last week I ended with three pointers for an organisation, written from a
+product where nothing was real. The three I would write now come from the same
+place but have evidence behind them, and they are narrower for it.
+
 What breaks at thirty is not the code; it is that the places where the boundary
+moved are invisible in the finished product. What breaks at thirty is not the code; it is that the places where the boundary
 moved are invisible in the finished product. Three decisions moved without me
 this weekend — a dropdown that quietly removed a state, a guardrail violation I
 was told about that had not happened, and three security checks that reported
