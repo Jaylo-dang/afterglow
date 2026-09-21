@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Mode, SkyApiResponse, ApodApiResponse } from './types';
 import { TonightSection } from './components/TonightSection';
 import { NasaSection } from './components/NasaSection';
+import { DisqusComments } from './components/DisqusComments';
 import { Footer } from './components/Footer';
 import { Camera } from 'lucide-react';
 
@@ -223,6 +224,9 @@ export default function App() {
             errorState={nasaError}
             onRetry={fetchNasaData}
           />
+
+          {/* Disqus Comments Section */}
+          <DisqusComments mode={mode} />
         </main>
 
         {/* SECTION 9 - Dual Source Credit Footer */}
