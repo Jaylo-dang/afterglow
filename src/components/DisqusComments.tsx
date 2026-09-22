@@ -82,7 +82,11 @@ export function DisqusComments({ mode = 'sunset' }: DisqusCommentsProps) {
         </div>
       </div>
 
-      <div id="disqus_thread" className="min-h-[160px]" />
+            <div
+        id="disqus_thread"
+        className="min-h-[160px]"
+        style={{ color: 'rgb(28, 25, 23)', backgroundColor: 'rgb(255, 255, 255)' }}
+      />
     </section>
   );
 }
