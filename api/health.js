@@ -73,20 +73,6 @@ export default async function handler(req, res) {
       nasa: nasaStatus,
       ltaDataMall: ltaStatus
     },
-    dependencies: {
-      openMeteo: {
-        keyConfigured: true,
-        status: openMeteoStatus
-      },
-      nasa: {
-        keyConfigured: nasaKeyConfigured,
-        status: nasaStatus
-      },
-      ltaDataMall: {
-        keyConfigured: ltaKeyConfigured,
-        status: ltaStatus
-      }
-    },
     timestamp: new Date().toISOString()
   });
 }

@@ -65,19 +65,14 @@ export interface ApodApiResponse {
 }
 
 export interface HealthApiResponse {
-  environmentVariables?: {
+  environmentVariables: {
     NASA_API_KEY: boolean;
     LTA_ACCOUNT_KEY: boolean;
   };
   upstreams: {
     openMeteo: number | string | null;
     nasa: number | string | null;
-    ltaDataMall?: number | string | null;
-  };
-  dependencies?: {
-    openMeteo: { keyConfigured: boolean; status: number | string | null };
-    nasa: { keyConfigured: boolean; status: number | string | null };
-    ltaDataMall: { keyConfigured: boolean; status: number | string | null };
+    ltaDataMall: number | string | null;
   };
   timestamp: string;
 }

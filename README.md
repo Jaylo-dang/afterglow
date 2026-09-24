@@ -108,7 +108,6 @@ A web application designed for landscape and golden hour photographers in Singap
     - `openMeteo`: HTTP status code (e.g., `200`) or `'unreachable'`.
     - `nasa`: HTTP status code, `'key missing'` (if `NASA_API_KEY` is not set; does not call upstream), or `'unreachable'`.
     - `ltaDataMall`: HTTP status code from a lightweight live probe (single bus arrival query to `03369`), `'key missing'` (if `LTA_ACCOUNT_KEY` is not set; does not call upstream), or `'unreachable'`.
-  - `dependencies`: Detailed status and configuration breakdown for `openMeteo`, `nasa`, and `ltaDataMall`.
   - `timestamp`: ISO 8601 timestamp of the health probe.
 - **Failures & Down Source Handling:**
   Each probe is isolated in its own independent `try/catch` block. Network failures report `'unreachable'`, missing keys report `'key missing'`, and HTTP errors preserve the upstream status. Never crashes or throws.
