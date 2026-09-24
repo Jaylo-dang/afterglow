@@ -50,6 +50,7 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
   const [spotsSource, setSpotsSource] = useState<string>('LTA DataMall');
   const [usingFallback, setUsingFallback] = useState<boolean>(false);
   const [fallbackReason, setFallbackReason] = useState<string | null>(null);
+  const [fallbackSnapshotDate, setFallbackSnapshotDate] = useState<string | null>(null);
   const [spotsError, setSpotsError] = useState<{
     status?: number;
     reference?: string;
@@ -104,6 +105,7 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
         setSpotsSource(data.source || 'LTA DataMall');
         setUsingFallback(Boolean(data.usingFallback));
         setFallbackReason(data.fallbackReason || null);
+        setFallbackSnapshotDate(data.fallbackSnapshotDate || '24 September 2026');
       }
     } catch {
       setSpotsError({
@@ -461,7 +463,9 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
                 Notice: Live bus stop data could not be reached.
               </p>
               <p className="text-amber-800 leading-relaxed">
-                These stop details come from a list built into the app rather than live from LTA DataMall
+                These stop details come from a snapshot taken on{' '}
+                <strong className="font-semibold text-amber-950">{fallbackSnapshotDate || '24 September 2026'}</strong>{' '}
+                rather than live from LTA DataMall
                 {spotsFetchedAt ? ` (attempted at ${formatFriendlyTime(spotsFetchedAt)})` : ''}.
                 {fallbackReason ? ` Reason: ${fallbackReason}` : ''}
               </p>
@@ -615,8 +619,11 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
                       {spot.nearestBusStop.source === 'built-in fallback list' ? (
                         <>
                           <span className="text-stone-300">•</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded">
-                            Built-in fallback
+                          <span
+                            className="text-[10px] font-semibold uppercase tracking-wider text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded"
+                            title="Snapshot taken on 24 September 2026"
+                          >
+                            Snapshot (24 Sep 2026)
                           </span>
                         </>
                       ) : (

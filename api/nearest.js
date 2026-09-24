@@ -19,42 +19,45 @@ const SPOTS = [
   { name: 'Punggol Settlement', lat: 1.4110, lon: 103.9100, facing: 'east' },
 ];
 
-// Fallback verified Singapore bus stops for the 5 spots
+// These values were read from LTA DataMall on 24 September 2026 and are a snapshot that will drift as bus stops change.
+const FALLBACK_SNAPSHOT_DATE = '24 September 2026';
+
 const KNOWN_NEAREST_BUS_STOPS = {
   'Marina Barrage': {
     code: '03369',
-    name: 'Marina Barrage',
-    road: 'Marina Way',
-    lat: 1.2804,
-    lon: 103.8712
+    name: 'Gardens by the Bay Stn Exit 1',
+    road: 'Marina Gdns Dr',
+    metresFromSpot: 202
   },
   'Henderson Waves': {
-    code: '10889',
-    name: 'Opp Blossoms @ Henderson',
-    road: 'Henderson Rd',
-    lat: 1.2798,
-    lon: 103.8202
+    code: '14259',
+    name: 'Blk 11',
+    road: 'Telok Blangah Cres',
+    metresFromSpot: 75
   },
   'Siloso Beach, Sentosa': {
-    code: '14519',
-    name: 'Siloso Beach Resort',
-    road: 'Siloso Beach Walk',
-    lat: 1.2562,
-    lon: 103.8122
+    code: '14539',
+    name: 'Beach Stn Ter',
+    road: 'Beach View',
+    metresFromSpot: 1134
   },
   'Bedok Jetty, East Coast Park': {
-    code: '92261',
-    name: 'Opp Eastern Lagoon II',
-    road: 'East Coast Park Rd',
-    lat: 1.3078,
-    lon: 103.9315
+    code: '93151',
+    name: 'Opp Cable Ski Pk',
+    road: 'East Coast Pk Svc Rd',
+    metresFromSpot: 480
+  },
+  'Bedok Jetty, ECP': {
+    code: '93151',
+    name: 'Opp Cable Ski Pk',
+    road: 'East Coast Pk Svc Rd',
+    metresFromSpot: 480
   },
   'Punggol Settlement': {
-    code: '65139',
-    name: 'Punggol Point Jetty',
-    road: 'Punggol Rd',
-    lat: 1.4190,
-    lon: 103.9108
+    code: '65709',
+    name: 'Bef SIT Punggol',
+    road: 'New Punggol Rd',
+    metresFromSpot: 65
   }
 };
 
@@ -202,14 +205,13 @@ export default async function handler(req, res) {
 
     if (!nearestStop) {
       usingFallback = true;
-      const fallback = KNOWN_NEAREST_BUS_STOPS[spot.name];
+      const fallback = KNOWN_NEAREST_BUS_STOPS[spot.name] || KNOWN_NEAREST_BUS_STOPS['Bedok Jetty, East Coast Park'];
       if (fallback) {
-        const dist = haversineMetres(spot.lat, spot.lon, fallback.lat, fallback.lon);
         nearestStop = {
           code: fallback.code,
           name: fallback.name,
           road: fallback.road,
-          metresFromSpot: Math.round(dist),
+          metresFromSpot: fallback.metresFromSpot,
           source: 'built-in fallback list'
         };
       } else {
@@ -256,6 +258,7 @@ export default async function handler(req, res) {
     source: usingFallback ? 'built-in fallback list' : 'LTA DataMall',
     usingFallback,
     fallbackReason,
+    fallbackSnapshotDate: usingFallback ? FALLBACK_SNAPSHOT_DATE : null,
     spots: spotsWithBusStops,
     userLocationProvided: hasUserCoords
   });
