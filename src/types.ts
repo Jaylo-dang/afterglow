@@ -52,3 +52,57 @@ export interface HealthApiResponse {
   };
   timestamp: string;
 }
+
+export interface NearestBusStop {
+  code: string;
+  name: string;
+  road: string;
+  metresFromSpot: number;
+  source: 'LTA DataMall' | 'built-in fallback list';
+}
+
+export interface NearestSpotItem {
+  name: string;
+  lat: number;
+  lon: number;
+  facing: 'east' | 'west';
+  distanceFromUserKm: number | null;
+  nearestBusStop: NearestBusStop;
+}
+
+export interface NearestApiResponse {
+  fetchedAt: string;
+  source: string;
+  usingFallback: boolean;
+  fallbackReason?: string | null;
+  spots: NearestSpotItem[];
+  userLocationProvided: boolean;
+  error?: string;
+  status?: number;
+  reference?: string;
+  message?: string;
+}
+
+export interface BusServiceArrival {
+  serviceNo: string;
+  nextBus: {
+    arrival: string;
+    load: string;
+    busType: string;
+    feature: string;
+  };
+  subsequentBuses: string[];
+}
+
+export interface ArrivalsApiResponse {
+  fetchedAt?: string;
+  source?: string;
+  busStopCode?: string;
+  noBusesDue?: boolean;
+  services?: BusServiceArrival[];
+  error?: string;
+  status?: number;
+  reference?: string;
+  message?: string;
+}
+

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Mode, SkyApiResponse, ApodApiResponse } from './types';
 import { TonightSection } from './components/TonightSection';
+import { TransitSection } from './components/TransitSection';
 import { NasaSection } from './components/NasaSection';
 import { DisqusComments } from './components/DisqusComments';
 import { Footer } from './components/Footer';
@@ -215,6 +216,9 @@ export default function App() {
             selectedDate={selectedDate}
             onDateChange={handleDateChange}
           />
+
+          {/* SECTION - "Getting to the Spots" (Nearest Spots & LTA Bus Connections) */}
+          <TransitSection mode={mode} />
 
           {/* SECTION 2 - "Tonight's sky, from NASA" (independent failure) */}
           <NasaSection
