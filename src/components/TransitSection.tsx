@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Mode, NearestSpotItem, NearestApiResponse, ArrivalsApiResponse } from '../types';
+import { Mode, SpotItem, NearestSpotItem, NearestApiResponse, ArrivalsApiResponse } from '../types';
 import {
   Navigation,
   Search,
@@ -11,19 +11,39 @@ import {
   RefreshCw,
   AlertTriangle,
   Clock,
-  Accessibility
+  Accessibility,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 interface TransitSectionProps {
   mode: Mode;
+  forecastSpots?: SpotItem[];
+  selectedDate?: string;
 }
 
-export function TransitSection({ mode }: TransitSectionProps) {
+type LocationStatus = 'idle' | 'asking' | 'granted' | 'refused' | 'timeout' | 'unavailable';
+
+// Haversine formula to calculate straight-line distance in metres between two GPS coordinates
+function haversineMetres(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSectionProps) {
   // Geolocation & spots state
-  const [locationStatus, setLocationStatus] = useState<
-    'idle' | 'requesting' | 'found' | 'refused' | 'timeout' | 'error'
-  >('idle');
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>('idle');
+  const [locationReadAt, setLocationReadAt] = useState<Date | null>(null);
   const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
+
   const [spots, setSpots] = useState<NearestSpotItem[]>([]);
   const [spotsLoading, setSpotsLoading] = useState<boolean>(true);
   const [spotsFetchedAt, setSpotsFetchedAt] = useState<string | null>(null);
@@ -36,8 +56,18 @@ export function TransitSection({ mode }: TransitSectionProps) {
     message: string;
   } | null>(null);
 
-  // Search filter (local in-browser filtering, no request on keystroke)
+  // Search filter (local in-browser filtering: spot name, bus stop name, and road name)
   const [searchTerm, setSearchTerm] = useState<string>('');
+
+  // Sunset / Sunrise facing control
+  const targetFacing = mode === 'sunset' ? 'west' : 'east';
+  const oppositeFacing = mode === 'sunset' ? 'east' : 'west';
+  const [showOppositeFacing, setShowOppositeFacing] = useState<boolean>(false);
+
+  // Reset showOppositeFacing when mode switches
+  useEffect(() => {
+    setShowOppositeFacing(false);
+  }, [mode]);
 
   // Expanded spot for live arrivals inspection
   const [selectedSpotName, setSelectedSpotName] = useState<string | null>(null);
@@ -86,19 +116,21 @@ export function TransitSection({ mode }: TransitSectionProps) {
     }
   };
 
-  // Initial load: fetch spots with default order
+  // Initial load: fetch spots
   useEffect(() => {
     fetchSpots(null);
   }, []);
 
-  // Request browser geolocation
+  // Request browser geolocation with 10 second timeout and 60 second maximumAge
   const handleRequestLocation = () => {
+    // Show pressed state immediately before any answer arrives
+    setLocationStatus('asking');
+
     if (!navigator.geolocation) {
-      setLocationStatus('refused');
+      setLocationStatus('unavailable');
       return;
     }
 
-    setLocationStatus('requesting');
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const coords = {
@@ -106,16 +138,20 @@ export function TransitSection({ mode }: TransitSectionProps) {
           lon: position.coords.longitude
         };
         setUserCoords(coords);
-        setLocationStatus('found');
+        setLocationReadAt(new Date());
+        setLocationStatus('granted');
         fetchSpots(coords);
       },
       (error) => {
-        if (error.code === error.PERMISSION_DENIED) {
+        // PositionError codes: 1 = PERMISSION_DENIED, 2 = POSITION_UNAVAILABLE, 3 = TIMEOUT
+        if (error.code === 1) {
           setLocationStatus('refused');
-        } else if (error.code === error.TIMEOUT) {
+        } else if (error.code === 3) {
           setLocationStatus('timeout');
+        } else if (error.code === 2) {
+          setLocationStatus('unavailable');
         } else {
-          setLocationStatus('error');
+          setLocationStatus('unavailable');
         }
       },
       {
@@ -125,6 +161,52 @@ export function TransitSection({ mode }: TransitSectionProps) {
       }
     );
   };
+
+  // Calculate distance in km from user's location to a spot
+  const getSpotDistanceKm = (spot: NearestSpotItem): number | null => {
+    if (spot.distanceFromUserKm !== null && spot.distanceFromUserKm !== undefined) {
+      return spot.distanceFromUserKm;
+    }
+    if (userCoords) {
+      const dMetres = haversineMetres(userCoords.lat, userCoords.lon, spot.lat, spot.lon);
+      return Math.round((dMetres / 1000) * 10) / 10;
+    }
+    return null;
+  };
+
+  // Rank spots by distance if location is held
+  const sortedSpots = useMemo(() => {
+    if (!userCoords) return spots;
+    return [...spots].sort((a, b) => {
+      const distA = getSpotDistanceKm(a) ?? 9999;
+      const distB = getSpotDistanceKm(b) ?? 9999;
+      return distA - distB;
+    });
+  }, [spots, userCoords]);
+
+  // In-browser text filtering: matches spot name, bus stop name, and road name
+  const searchFilteredSpots = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return sortedSpots;
+    return sortedSpots.filter((spot) => {
+      const nameMatch = spot.name.toLowerCase().includes(term);
+      const busStopNameMatch = spot.nearestBusStop?.name?.toLowerCase().includes(term) ?? false;
+      const roadMatch = spot.nearestBusStop?.road?.toLowerCase().includes(term) ?? false;
+      return nameMatch || busStopNameMatch || roadMatch;
+    });
+  }, [sortedSpots, searchTerm]);
+
+  // Facing filter: Sunset lists west-facing spots, sunrise lists east-facing spots
+  const matchingFacingSpots = useMemo(() => {
+    return searchFilteredSpots.filter((spot) => spot.facing === targetFacing);
+  }, [searchFilteredSpots, targetFacing]);
+
+  const oppositeFacingSpots = useMemo(() => {
+    return searchFilteredSpots.filter((spot) => spot.facing === oppositeFacing);
+  }, [searchFilteredSpots, oppositeFacing]);
+
+  const displayedSpots = showOppositeFacing ? searchFilteredSpots : matchingFacingSpots;
+  const hiddenCount = oppositeFacingSpots.length;
 
   // Fetch live bus arrivals for a stop code
   const fetchArrivals = async (stopCode: string) => {
@@ -169,31 +251,19 @@ export function TransitSection({ mode }: TransitSectionProps) {
     }
   };
 
-  // In-browser text filtering for spots
-  const filteredSpots = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return spots;
-    return spots.filter(
-      (spot) =>
-        spot.name.toLowerCase().includes(term) ||
-        spot.nearestBusStop.name.toLowerCase().includes(term) ||
-        spot.nearestBusStop.road.toLowerCase().includes(term)
-    );
-  }, [spots, searchTerm]);
-
-  // Format ISO timestamp in friendly readable words without timezone conversion confusion
-  const formatFriendlyTime = (isoString?: string | null) => {
-    if (!isoString) return '';
+  // Format ISO timestamp or Date object into human-readable words without timezone conversion confusion
+  const formatFriendlyTime = (dateInput?: string | Date | null) => {
+    if (!dateInput) return '';
     try {
-      const date = new Date(isoString);
+      const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
       return date.toLocaleTimeString('en-SG', {
-        hour: '2-digit',
+        hour: 'numeric',
         minute: '2-digit',
         second: '2-digit',
         hour12: true
       });
     } catch {
-      return isoString;
+      return String(dateInput);
     }
   };
 
@@ -220,40 +290,79 @@ export function TransitSection({ mode }: TransitSectionProps) {
           </p>
         </div>
 
-        {/* Location Action Button */}
+        {/* Location Action Button with distinct visible states */}
         <div className="flex items-center gap-2">
           <button
             id="locate-me-button"
             type="button"
             onClick={handleRequestLocation}
-            disabled={locationStatus === 'requesting'}
-            className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all shadow-sm ${
-              mode === 'sunset'
+            disabled={locationStatus === 'asking'}
+            className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all shadow-sm ${
+              locationStatus === 'asking'
+                ? 'bg-amber-600 text-white opacity-85 ring-2 ring-amber-400 cursor-wait'
+                : locationStatus === 'granted'
+                ? 'bg-emerald-700 text-white hover:bg-emerald-800 ring-1 ring-emerald-600'
+                : locationStatus === 'refused'
+                ? 'bg-stone-100 border border-stone-300 text-stone-800 hover:bg-stone-200'
+                : locationStatus === 'timeout'
+                ? 'bg-amber-50 border border-amber-300 text-amber-900 hover:bg-amber-100'
+                : locationStatus === 'unavailable'
+                ? 'bg-stone-100 border border-stone-300 text-stone-800 hover:bg-stone-200'
+                : mode === 'sunset'
                 ? 'bg-gradient-to-r from-amber-600 via-orange-600 to-rose-700 text-white hover:opacity-95'
                 : 'bg-gradient-to-r from-rose-500 via-pink-500 to-amber-500 text-white hover:opacity-95'
-            } disabled:opacity-50`}
+            }`}
           >
-            <MapPin className="w-4 h-4 shrink-0" />
+            {locationStatus === 'asking' ? (
+              <RefreshCw className="w-4 h-4 shrink-0 animate-spin" />
+            ) : locationStatus === 'granted' ? (
+              <MapPin className="w-4 h-4 shrink-0 text-emerald-200" />
+            ) : locationStatus === 'refused' ? (
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
+            ) : locationStatus === 'timeout' ? (
+              <Clock className="w-4 h-4 shrink-0 text-amber-600" />
+            ) : locationStatus === 'unavailable' ? (
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
+            ) : (
+              <MapPin className="w-4 h-4 shrink-0" />
+            )}
+
             <span>
-              {locationStatus === 'requesting'
-                ? 'Finding your location...'
-                : locationStatus === 'found'
-                ? 'Location active (Click to refresh)'
+              {locationStatus === 'asking'
+                ? 'Asking browser for location...'
+                : locationStatus === 'granted'
+                ? 'Location active (tap to refresh)'
+                : locationStatus === 'refused'
+                ? 'Location refused (tap to retry)'
+                : locationStatus === 'timeout'
+                ? 'Location timed out (tap to retry)'
+                : locationStatus === 'unavailable'
+                ? 'Position unavailable (tap to retry)'
                 : 'Find nearest spot to me'}
             </span>
           </button>
         </div>
       </div>
 
-      {/* Geolocation status banners */}
+      {/* Geolocation status banners: Visibly distinct for each PositionError outcome */}
       {locationStatus === 'refused' && (
         <div
           id="location-refused-banner"
-          className="mb-6 p-4 rounded-xl bg-stone-100 border border-stone-300 text-stone-800 text-xs sm:text-sm flex items-start gap-3"
+          className="mb-6 p-4 rounded-xl bg-stone-100 border border-stone-300 text-stone-800 text-xs sm:text-sm flex items-start gap-3 shadow-sm"
         >
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-semibold">Location permission was not granted.</span> No problem — you can browse all five spots below or use the search box to find your favourite location.
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-semibold text-stone-900">
+              Your browser is holding a decision made earlier and is not asking again.
+            </p>
+            <p className="text-stone-700 leading-relaxed">
+              To change this setting:{' '}
+              <strong className="text-stone-900">in Safari</strong>, go to <span className="underline decoration-stone-400">Settings</span>, then <span className="underline decoration-stone-400">Websites</span>, then <span className="underline decoration-stone-400">Location</span>;{' '}
+              <strong className="text-stone-900">in Chrome</strong>, click the settings icon at the left of the address bar to reset location permissions.
+            </p>
+            <p className="text-stone-600 pt-0.5">
+              You can use the filter box below to find spots by name, bus stop, or road without sharing your location.
+            </p>
           </div>
         </div>
       )}
@@ -261,25 +370,69 @@ export function TransitSection({ mode }: TransitSectionProps) {
       {locationStatus === 'timeout' && (
         <div
           id="location-timeout-banner"
-          className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs sm:text-sm flex items-start gap-3"
+          className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs sm:text-sm flex items-start gap-3 shadow-sm"
         >
-          <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-semibold">Location request timed out.</span> Please try tapping again or filter spots below by name.
+          <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-semibold text-amber-900">
+              Location request timed out after 10 seconds.
+            </p>
+            <p className="text-amber-800 leading-relaxed">
+              Your device took too long to return GPS coordinates. You can tap &ldquo;Location timed out (tap to retry)&rdquo; above to try again, or use the filter box below to search spots without location.
+            </p>
           </div>
         </div>
       )}
 
-      {locationStatus === 'found' && (
+      {locationStatus === 'unavailable' && (
         <div
-          id="location-found-banner"
-          className="mb-6 p-3.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs sm:text-sm flex items-center justify-between"
+          id="location-unavailable-banner"
+          className="mb-6 p-4 rounded-xl bg-stone-100 border border-stone-300 text-stone-800 text-xs sm:text-sm flex items-start gap-3 shadow-sm"
+        >
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-semibold text-stone-900">
+              Position unavailable from your device.
+            </p>
+            <p className="text-stone-700 leading-relaxed">
+              Your browser could not determine your current position. Check your device location or GPS settings, or use the filter box below to search spots by name or bus stop.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Explanatory relationship banner comparing the two rankings */}
+      <div
+        id="rankings-relationship-note"
+        className="mb-4 p-3 rounded-xl bg-stone-50 border border-stone-200 text-xs text-stone-600 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+      >
+        <div>
+          <strong className="text-stone-800">Two rankings at a glance: </strong>
+          The section above ranks spots by atmospheric sky conditions (0–100 score) for photography tonight.
+          {userCoords ? (
+            <span> This section ranks spots by straight-line distance from your location (read at <strong className="text-stone-900">{formatFriendlyTime(locationReadAt)}</strong>). Compare both side-by-side to choose the best light within reach.</span>
+          ) : (
+            <span> This section orders spots by distance once your location is known. Tap &ldquo;Find nearest spot to me&rdquo; to see distances side-by-side.</span>
+          )}
+        </div>
+      </div>
+
+      {/* Line above list when location is held: specifies distance ordering and exact time location was read */}
+      {userCoords && locationStatus === 'granted' && (
+        <div
+          id="location-ordered-banner"
+          className="mb-6 p-3.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs sm:text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm"
         >
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-semibold">Showing spots ranked by distance from your current position.</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span className="font-semibold">
+              The list is ordered by distance from your location
+              {locationReadAt ? ` (read at ${formatFriendlyTime(locationReadAt)})` : ''}.
+            </span>
           </div>
-          <span className="text-[11px] font-mono text-emerald-800 font-medium">Nearest first</span>
+          <span className="text-[11px] font-mono text-emerald-800 font-bold px-2 py-0.5 rounded bg-emerald-100 border border-emerald-200 shrink-0 self-start sm:self-auto">
+            Nearest First
+          </span>
         </div>
       )}
 
@@ -305,7 +458,7 @@ export function TransitSection({ mode }: TransitSectionProps) {
         </div>
       )}
 
-      {/* Spot Filter Search Box */}
+      {/* Spot Filter Search Box: matches spot name, bus stop name, and road name without promising landmarks */}
       <div className="mb-6">
         <div className="relative">
           <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -314,7 +467,7 @@ export function TransitSection({ mode }: TransitSectionProps) {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Filter spots by name, landmark, or bus stop..."
+            placeholder="Filter spots by name, bus stop, or road..."
             className="w-full bg-stone-50 border border-stone-300 rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm text-stone-900 placeholder:text-stone-400 outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all"
           />
           {searchTerm && (
@@ -357,9 +510,16 @@ export function TransitSection({ mode }: TransitSectionProps) {
       {/* Spot Cards */}
       {!spotsLoading && !spotsError && (
         <div className="space-y-4">
-          {filteredSpots.map((spot, index) => {
+          {displayedSpots.map((spot, index) => {
             const isExpanded = selectedSpotName === spot.name;
             const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lon}&travelmode=transit`;
+            const distanceKm = getSpotDistanceKm(spot);
+
+            // Match spot with forecast data to retrieve conditions score for the selected mode and date
+            const forecastMatch = forecastSpots?.find(
+              (f) => f.name.toLowerCase().trim() === spot.name.toLowerCase().trim()
+            );
+            const conditionsScore = forecastMatch?.score;
 
             return (
               <div
@@ -378,18 +538,37 @@ export function TransitSection({ mode }: TransitSectionProps) {
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-base font-bold text-stone-900">{spot.name}</h3>
+
                       <span className="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded bg-stone-100 border border-stone-200 text-stone-700">
                         Facing {spot.facing}
                       </span>
-                      {spot.distanceFromUserKm !== null && (
+
+                      {/* Conditions score and distance indicators placed beside each other */}
+                      {conditionsScore !== undefined && (
+                        <span
+                          className={`text-xs font-mono font-bold px-2.5 py-0.5 rounded-full border ${
+                            conditionsScore >= 70
+                              ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                              : conditionsScore >= 40
+                              ? 'bg-amber-50 text-amber-900 border-amber-300'
+                              : 'bg-stone-100 text-stone-700 border-stone-300'
+                          }`}
+                          title={`Forecast conditions score for this spot (${mode})`}
+                        >
+                          Sky Score: {conditionsScore}/100
+                        </span>
+                      )}
+
+                      {distanceKm !== null && (
                         <span
                           className={`text-xs font-mono font-bold px-2.5 py-0.5 rounded-full border ${
                             mode === 'sunset'
                               ? 'bg-amber-50 text-orange-900 border-amber-300'
                               : 'bg-rose-50 text-rose-900 border-rose-300'
                           }`}
+                          title="Straight-line distance from your location"
                         >
-                          {spot.distanceFromUserKm.toFixed(1)} km away
+                          {distanceKm.toFixed(1)} km away
                         </span>
                       )}
                     </div>
@@ -518,7 +697,7 @@ export function TransitSection({ mode }: TransitSectionProps) {
                         </div>
                         <p>{arrivalsError.message}</p>
                         <p className="text-xs text-stone-600 mt-2">
-                          You can still tap "Directions" above to view full Google Maps transit route options.
+                          You can still tap &ldquo;Directions&rdquo; above to view full Google Maps transit route options.
                         </p>
                       </div>
                     )}
@@ -599,9 +778,56 @@ export function TransitSection({ mode }: TransitSectionProps) {
             );
           })}
 
-          {filteredSpots.length === 0 && (
+          {displayedSpots.length === 0 && (
             <div className="p-8 text-center text-xs sm:text-sm text-stone-500 bg-stone-50 rounded-xl border border-stone-200">
-              No shooting spots found matching "{searchTerm}". Try clearing your search.
+              No shooting spots found matching &ldquo;{searchTerm}&rdquo; facing {targetFacing} for {mode}.
+            </div>
+          )}
+
+          {/* Hidden spots indicator: explains how many spots are hidden and why, with a control to show them anyway */}
+          {!showOppositeFacing && hiddenCount > 0 && (
+            <div
+              id="hidden-spots-notice"
+              className="mt-4 p-3.5 rounded-xl bg-stone-100 border border-stone-200 text-xs text-stone-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm"
+            >
+              <div className="flex items-center gap-2">
+                <EyeOff className="w-4 h-4 text-stone-500 shrink-0" />
+                <span>
+                  <strong>{hiddenCount} {hiddenCount === 1 ? 'spot' : 'spots'} facing {oppositeFacing} {hiddenCount === 1 ? 'is' : 'are'} hidden</strong> because {hiddenCount === 1 ? 'it faces' : 'they face'} away from the {mode}.
+                </span>
+              </div>
+              <button
+                id="toggle-show-hidden-spots-btn"
+                type="button"
+                onClick={() => setShowOppositeFacing(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-stone-300 text-stone-800 font-semibold text-xs hover:bg-stone-50 transition-colors shadow-sm self-start sm:self-auto shrink-0"
+              >
+                <Eye className="w-3.5 h-3.5 text-stone-600" />
+                <span>Show {hiddenCount === 1 ? 'it' : 'them'} anyway</span>
+              </button>
+            </div>
+          )}
+
+          {showOppositeFacing && hiddenCount > 0 && (
+            <div
+              id="hidden-spots-notice"
+              className="mt-4 p-3.5 rounded-xl bg-amber-50/80 border border-amber-200 text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm"
+            >
+              <div className="flex items-center gap-2">
+                <Eye className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  <strong>Showing all spots</strong> (including {hiddenCount} facing {oppositeFacing} away from the {mode}).
+                </span>
+              </div>
+              <button
+                id="toggle-hide-opposite-spots-btn"
+                type="button"
+                onClick={() => setShowOppositeFacing(false)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-900 font-semibold text-xs hover:bg-amber-100/50 transition-colors shadow-sm self-start sm:self-auto shrink-0"
+              >
+                <EyeOff className="w-3.5 h-3.5 text-amber-700" />
+                <span>Hide opposite-facing spots</span>
+              </button>
             </div>
           )}
         </div>

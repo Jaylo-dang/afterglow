@@ -218,7 +218,11 @@ export default function App() {
           />
 
           {/* SECTION - "Getting to the Spots" (Nearest Spots & LTA Bus Connections) */}
-          <TransitSection mode={mode} />
+          <TransitSection
+            mode={mode}
+            forecastSpots={weatherData?.allSpots || weatherData?.rankedSpots}
+            selectedDate={selectedDate}
+          />
 
           {/* SECTION 2 - "Tonight's sky, from NASA" (independent failure) */}
           <NasaSection

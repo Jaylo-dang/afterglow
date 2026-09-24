@@ -150,8 +150,6 @@ export default async function handler(req, res) {
   const latStr = query.lat;
   const lonStr = query.lon;
 
- 
-
   const userLat = latStr !== undefined && latStr !== null && latStr !== '' ? parseFloat(latStr) : null;
   const userLon = lonStr !== undefined && lonStr !== null && lonStr !== '' ? parseFloat(lonStr) : null;
 
@@ -246,14 +244,13 @@ export default async function handler(req, res) {
     spotsWithBusStops.sort((a, b) => (a.distanceFromUserKm ?? 9999) - (b.distanceFromUserKm ?? 9999));
   }
 
-    // Only cache an answer that actually came from LTA. A fallback answer describes a
-  // failure at one moment in time; serving it to later visitors would keep telling
-  // them the data is unavailable long after it came back.
+  // Conditional Cache-Control: no-store when using fallback; s-maxage when live dataset succeeded
   if (usingFallback) {
     res.setHeader('Cache-Control', 'no-store');
   } else {
     res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=86400');
   }
+
   res.status(200).json({
     fetchedAt: new Date().toISOString(),
     source: usingFallback ? 'built-in fallback list' : 'LTA DataMall',
