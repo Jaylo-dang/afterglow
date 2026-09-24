@@ -15,7 +15,22 @@ export default async function handler(req, res) {
   // Query parameters: mode ('sunset' or 'sunrise'), optional date ('YYYY-MM-DD')
   const query = req.query || {};
   const mode = query.mode === 'sunrise' ? 'sunrise' : 'sunset';
-  const requestedDate = query.date ? String(query.date).trim() : null;
+  const rawDate = query.date !== undefined && query.date !== null ? String(query.date).trim() : null;
+
+  // Validate the date at the edge: anything that is not YYYY-MM-DD is 400 with the required format stated
+  if (rawDate !== null && rawDate !== '') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+      res.status(400).json({
+        error: 'Invalid Date Format',
+        status: 400,
+        reference: 'SKY-DATE-400',
+        message: 'Invalid date parameter. Date must be in YYYY-MM-DD format.'
+      });
+      return;
+    }
+  }
+
+  const requestedDate = rawDate && rawDate !== '' ? rawDate : null;
 
   // Set Cache-Control as required: 30 minutes cache, 1 hour stale-while-revalidate
   res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=3600');
@@ -33,6 +48,7 @@ export default async function handler(req, res) {
     res.status(502).json({
       error: 'Upstream Unreachable',
       status: 502,
+      reference: 'SKY-NET-502',
       message: 'Open-Meteo could not be reached at all'
     });
     return;
@@ -43,6 +59,7 @@ export default async function handler(req, res) {
     res.status(response.status).json({
       error: 'Upstream Refused',
       status: response.status,
+      reference: `SKY-REF-${response.status}`,
       message: `Open-Meteo returned HTTP ${response.status}: ${response.statusText || 'Request failed'}`
     });
     return;
@@ -55,6 +72,7 @@ export default async function handler(req, res) {
     res.status(502).json({
       error: 'Invalid Upstream Response',
       status: 502,
+      reference: 'SKY-PARSE-502',
       message: 'Open-Meteo response could not be parsed as JSON'
     });
     return;
@@ -74,12 +92,45 @@ export default async function handler(req, res) {
     if (dayIndex === -1) {
       // Requested date is out of range of the 7-day free tier forecast
       res.status(200).json({
+        fetchedAt: new Date().toISOString(),
+        source: 'Open-Meteo',
         outOfRange: true,
         requestedDate,
         message: 'The forecast does not cover the requested day, because the free tier only goes seven days ahead',
         availableDates
       });
       return;
+    }
+  }
+
+  // Read the latitude and longitude Open-Meteo returns for each location and compare them to the coordinates asked for.
+  // Group spots by resolved forecast grid point (rounded to 4 decimal places).
+  const gridGroups = new Map();
+  for (let i = 0; i < SPOTS.length; i++) {
+    const spotMeta = SPOTS[i];
+    const spotResult = resultsArray[i];
+    if (!spotResult) continue;
+    const gLat = typeof spotResult.latitude === 'number' ? spotResult.latitude : spotMeta.lat;
+    const gLon = typeof spotResult.longitude === 'number' ? spotResult.longitude : spotMeta.lon;
+    const key = `${gLat.toFixed(4)},${gLon.toFixed(4)}`;
+    if (!gridGroups.has(key)) {
+      gridGroups.set(key, { gLat, gLon, spots: [] });
+    }
+    gridGroups.get(key).spots.push(spotMeta.name);
+  }
+
+  // Identify spots resolving to the same grid point
+  const sharedGridSpots = [];
+  const sharedGridDescriptions = [];
+  for (const [, group] of gridGroups) {
+    if (group.spots.length > 1) {
+      sharedGridSpots.push(...group.spots);
+      sharedGridDescriptions.push({
+        gridLat: group.gLat,
+        gridLon: group.gLon,
+        spots: group.spots,
+        message: `${group.spots.join(' and ')} resolve to the same forecast grid square (${group.gLat.toFixed(4)}°N, ${group.gLon.toFixed(4)}°E) and are not independent.`
+      });
     }
   }
 
@@ -93,6 +144,18 @@ export default async function handler(req, res) {
     if (!spotResult || !spotResult.hourly || !spotResult.daily) {
       missingSpots.push(spotMeta.name);
       continue;
+    }
+
+    const gLat = typeof spotResult.latitude === 'number' ? spotResult.latitude : spotMeta.lat;
+    const gLon = typeof spotResult.longitude === 'number' ? spotResult.longitude : spotMeta.lon;
+    const isSharedGrid = sharedGridSpots.includes(spotMeta.name);
+
+    let spotsSharingThisGrid = [];
+    for (const [, group] of gridGroups) {
+      if (group.spots.includes(spotMeta.name) && group.spots.length > 1) {
+        spotsSharingThisGrid = group.spots.filter(n => n !== spotMeta.name);
+        break;
+      }
     }
 
     const daily = spotResult.daily;
@@ -143,9 +206,17 @@ export default async function handler(req, res) {
       name: spotMeta.name,
       lat: spotMeta.lat,
       lon: spotMeta.lon,
+      gridLat: gLat,
+      gridLon: gLon,
+      requestedLat: spotMeta.lat,
+      requestedLon: spotMeta.lon,
+      snappedToGrid: Math.abs(gLat - spotMeta.lat) > 0.0001 || Math.abs(gLon - spotMeta.lon) > 0.0001,
       facing: spotMeta.facing,
       score,
       eventTime,
+      sharesGridPoint: isSharedGrid,
+      sharedGridSpots: isSharedGrid ? sharedGridSpots : [],
+      sharedWithSpots: spotsSharingThisGrid,
       raw: {
         cloud_cover_low: rawLow,
         cloud_cover_mid: rawMid,
@@ -168,6 +239,8 @@ export default async function handler(req, res) {
   const primaryEventTime = primarySpot?.eventTime || sampleSpotData?.daily?.[mode === 'sunrise' ? 'sunrise' : 'sunset']?.[dayIndex] || '';
 
   res.status(200).json({
+    fetchedAt: new Date().toISOString(),
+    source: 'Open-Meteo',
     mode,
     outOfRange: false,
     date: availableDates[dayIndex] || requestedDate || '',
@@ -175,6 +248,8 @@ export default async function handler(req, res) {
     eventTime: primaryEventTime,
     rankedSpots: eligibleSpots,
     allSpots: processedSpots,
-    missingSpots
+    missingSpots,
+    sharedGridSpots,
+    sharedGridDescriptions
   });
 }

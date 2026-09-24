@@ -14,6 +14,7 @@ export default async function handler(req, res) {
     res.status(503).json({
       error: 'Configuration Missing',
       status: 503,
+      reference: 'NASA-KEY-503',
       message: 'NASA_API_KEY environment variable is not configured or empty'
     });
     return;
@@ -28,6 +29,7 @@ export default async function handler(req, res) {
     res.status(502).json({
       error: 'Upstream Unreachable',
       status: 502,
+      reference: 'NASA-NET-502',
       message: 'NASA APOD upstream could not be reached at all'
     });
     return;
@@ -38,6 +40,7 @@ export default async function handler(req, res) {
     res.status(response.status).json({
       error: 'Upstream Refused',
       status: response.status,
+      reference: `NASA-REF-${response.status}`,
       message: `NASA APOD returned HTTP ${response.status}: ${response.statusText || 'Request refused'}`
     });
     return;
@@ -50,6 +53,7 @@ export default async function handler(req, res) {
     res.status(502).json({
       error: 'Invalid Upstream Response',
       status: 502,
+      reference: 'NASA-PARSE-502',
       message: 'NASA APOD response could not be parsed as JSON'
     });
     return;

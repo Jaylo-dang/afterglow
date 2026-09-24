@@ -61,6 +61,22 @@ export function TonightSection({
     }
   };
 
+  // Format reading timestamp into words a person reads without converting
+  const formatReadingTime = (isoString?: string) => {
+    if (!isoString) return '';
+    try {
+      const d = new Date(isoString);
+      return d.toLocaleTimeString('en-SG', {
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return isoString;
+    }
+  };
+
   const getVerdict = (score: number) => {
     if (score >= 80) return 'Outstanding conditions: pack your tripod and head out early.';
     if (score >= 65) return 'Favorable conditions: high probability of vibrant color in the sky.';
@@ -297,6 +313,11 @@ export function TonightSection({
                   </div>
                   <div className="text-xs text-stone-600 mt-0.5">
                     Target Spot: <span className="font-bold text-stone-900">{currentSpot.name}</span>
+                    {data?.fetchedAt && (
+                      <span className="ml-2 font-normal text-stone-500">
+                        • Read at {formatReadingTime(data.fetchedAt)}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <span className="text-xs bg-stone-200/80 text-stone-800 font-medium px-2.5 py-1 rounded-full border border-stone-300">
@@ -337,12 +358,36 @@ export function TonightSection({
 
           {/* SOURCED NUMBERS: The four sourced figures always visible and labelled */}
           <div id="sourced-numbers-section">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-3">
               <h3 className="text-xs uppercase tracking-wider font-bold text-stone-700">
                 Sourced Atmospheric Metrics ({currentSpot.name})
               </h3>
-              <span className="text-xs text-stone-600 font-medium">Source: Open-Meteo raw hourly metrics</span>
+              <div className="text-xs text-stone-600 font-medium flex items-center gap-2">
+                <span>Source: {data?.source || 'Open-Meteo'} raw hourly metrics</span>
+                {data?.fetchedAt && (
+                  <>
+                    <span className="text-stone-300">•</span>
+                    <span>Read at {formatReadingTime(data.fetchedAt)}</span>
+                  </>
+                )}
+              </div>
             </div>
+
+            {/* Grid collision statement: state plainly that the two readings come from the same forecast grid square and are not independent */}
+            {currentSpot.sharesGridPoint && (
+              <div
+                id="shared-grid-notice-metrics"
+                className="mb-4 p-3 rounded-xl bg-amber-50/95 border border-amber-300 text-amber-950 text-xs sm:text-sm flex items-start gap-2.5 shadow-sm"
+              >
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold">Shared forecast grid square: </span>
+                  <span>
+                    {currentSpot.name} and {currentSpot.sharedWithSpots && currentSpot.sharedWithSpots.length > 0 ? currentSpot.sharedWithSpots.join(', ') : 'another spot'} resolve to the same forecast grid square ({currentSpot.gridLat?.toFixed(4)}°N, {currentSpot.gridLon?.toFixed(4)}°E). These two readings come from the same forecast grid square and are not independent.
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
               {/* Metric 1: Low Cloud % */}
@@ -457,13 +502,17 @@ score      = Math.round(0.5*midHighPts + 0.3*lowPts + 0.2*visPts)`}
 
           {/* Ranked List of Shooting Spots */}
           <div id="ranked-spots-section">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-3">
               <div>
                 <h3 className="text-sm font-bold text-stone-900">
                   Ranked Shooting Spots ({mode === 'sunset' ? 'West-Facing' : 'East-Facing'})
                 </h3>
                 <p className="text-xs text-stone-600">
-                  Ranked best conditions first for {mode}. Click any row to inspect its exact figures above.
+                  Ranked best conditions first for {mode}.
+                  {data?.fetchedAt && (
+                    <span> Forecast read from {data?.source || 'Open-Meteo'} at {formatReadingTime(data.fetchedAt)}.</span>
+                  )}
+                  {' '}Click any row to inspect its exact figures above.
                 </p>
               </div>
               <span className="text-xs text-stone-500 font-mono font-medium">
@@ -524,6 +573,12 @@ score      = Math.round(0.5*midHighPts + 0.3*lowPts + 0.2*visPts)`}
                           <span className="text-stone-300">•</span>
                           <span>{spot.lat.toFixed(4)}, {spot.lon.toFixed(4)}</span>
                         </div>
+                        {spot.sharesGridPoint && (
+                          <div className="text-[11px] text-amber-800 font-medium bg-amber-50 border border-amber-200 rounded px-2 py-0.5 mt-1 inline-flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                            <span>Shares forecast grid square with {spot.sharedWithSpots?.join(', ')} — readings come from the same grid square and are not independent</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 

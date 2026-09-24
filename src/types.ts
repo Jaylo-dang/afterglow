@@ -12,13 +12,30 @@ export interface SpotItem {
   name: string;
   lat: number;
   lon: number;
+  gridLat?: number;
+  gridLon?: number;
+  requestedLat?: number;
+  requestedLon?: number;
+  snappedToGrid?: boolean;
   facing: 'east' | 'west';
   score: number;
   eventTime: string;
+  sharesGridPoint?: boolean;
+  sharedGridSpots?: string[];
+  sharedWithSpots?: string[];
   raw: SpotRawData;
 }
 
+export interface SharedGridDescription {
+  gridLat: number;
+  gridLon: number;
+  spots: string[];
+  message: string;
+}
+
 export interface SkyApiResponse {
+  fetchedAt?: string;
+  source?: string;
   mode: Mode;
   outOfRange?: boolean;
   message?: string;
@@ -28,8 +45,11 @@ export interface SkyApiResponse {
   rankedSpots: SpotItem[];
   allSpots: SpotItem[];
   missingSpots: string[];
+  sharedGridSpots?: string[];
+  sharedGridDescriptions?: SharedGridDescription[];
   error?: string;
   status?: number;
+  reference?: string;
 }
 
 export interface ApodApiResponse {

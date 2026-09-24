@@ -51,9 +51,12 @@ export default function App() {
         } catch {
           errJson = { message: res.statusText };
         }
+        const refSuffix = errJson?.reference ? ` [Ref: ${errJson.reference}]` : '';
         setWeatherError({
           type: 'upstreamRefused',
-          message: errJson.message || `Open-Meteo returned HTTP ${res.status}: ${res.statusText}. Conditions cannot be calculated right now.`,
+          message: errJson.message
+            ? `${errJson.message}${refSuffix}`
+            : `Open-Meteo returned HTTP ${res.status}: ${res.statusText}. Conditions cannot be calculated right now.${refSuffix}`,
         });
         setWeatherLoading(false);
         return;
@@ -100,17 +103,19 @@ export default function App() {
           errJson = { message: res.statusText };
         }
 
+        const refSuffix = errJson?.reference ? ` [Ref: ${errJson.reference}]` : '';
+
         if (res.status === 503 && errJson.message?.includes('NASA_API_KEY')) {
           setNasaError({
             type: 'missingKey',
             status: 503,
-            message: 'NASA APOD service is unavailable: NASA_API_KEY environment variable is not configured.',
+            message: `NASA APOD service is unavailable: NASA_API_KEY environment variable is not configured.${refSuffix}`,
           });
         } else {
           setNasaError({
             type: 'upstreamRefused',
             status: res.status,
-            message: errJson.message || `NASA APOD returned HTTP ${res.status}: ${res.statusText}`,
+            message: `${errJson.message || `NASA APOD returned HTTP ${res.status}: ${res.statusText}`}${refSuffix}`,
           });
         }
         setNasaLoading(false);

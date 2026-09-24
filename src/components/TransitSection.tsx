@@ -351,16 +351,28 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
           className="mb-6 p-4 rounded-xl bg-stone-100 border border-stone-300 text-stone-800 text-xs sm:text-sm flex items-start gap-3 shadow-sm"
         >
           <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="space-y-1">
+          <div className="space-y-2">
             <p className="font-semibold text-stone-900">
-              Your browser is holding a decision made earlier and is not asking again.
+              Location permission was denied.
             </p>
             <p className="text-stone-700 leading-relaxed">
-              To change this setting:{' '}
-              <strong className="text-stone-900">in Safari</strong>, go to <span className="underline decoration-stone-400">Settings</span>, then <span className="underline decoration-stone-400">Websites</span>, then <span className="underline decoration-stone-400">Location</span>;{' '}
-              <strong className="text-stone-900">in Chrome</strong>, click the settings icon at the left of the address bar to reset location permissions.
+              If you want to share your location, check these three places in the order you should try them:
             </p>
-            <p className="text-stone-600 pt-0.5">
+            <ol className="list-decimal list-inside space-y-1.5 text-stone-700 leading-relaxed pl-0.5">
+              <li>
+                <strong className="text-stone-900">This site&apos;s location permission in the browser:</strong>{' '}
+                In Chrome, click the icon at the left of the address bar to allow location; in Safari, check website permissions for this page.
+              </li>
+              <li>
+                <strong className="text-stone-900">The browser&apos;s own location setting:</strong>{' '}
+                Ensure location access is enabled in your browser&apos;s general preferences or privacy settings.
+              </li>
+              <li>
+                <strong className="text-stone-900">The operating system&apos;s location settings:</strong>{' '}
+                On macOS: <span className="underline decoration-stone-400">System Settings</span>, then <span className="underline decoration-stone-400">Privacy and Security</span>, then <span className="underline decoration-stone-400">Location Services</span>, then ensure your browser is enabled in the list. On other operating systems, ensure system location services are enabled for your browser.
+              </li>
+            </ol>
+            <p className="text-stone-600 pt-1">
               You can use the filter box below to find spots by name, bus stop, or road without sharing your location.
             </p>
           </div>
@@ -569,6 +581,16 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
                           title="Straight-line distance from your location"
                         >
                           {distanceKm.toFixed(1)} km away
+                        </span>
+                      )}
+
+                      {forecastMatch?.sharesGridPoint && (
+                        <span
+                          className="text-[11px] text-amber-800 font-medium bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5 inline-flex items-center gap-1"
+                          title="Forecast grid cell is shared with another location"
+                        >
+                          <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                          <span>Same forecast grid square as {forecastMatch.sharedWithSpots?.join(', ')} — readings are not independent</span>
                         </span>
                       )}
                     </div>
