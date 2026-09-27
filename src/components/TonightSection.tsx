@@ -105,7 +105,7 @@ export function TonightSection({
     } else {
       // Sunrise mode: cooler dawn - soft rose, peach lifting into pale gold
       if (score >= 80) {
-        return 'bg-gradient-to-br from-rose-500 via-pink-500 to-amber-400 text-white border-rose-300/40 shadow-lg shadow-rose-400/25';
+        return 'bg-gradient-to-br from-rose-500 via-pink-500 to-amber-400 text-stone-900 border-rose-300/40 shadow-lg shadow-rose-400/25';
       }
       if (score >= 65) {
         return 'bg-gradient-to-br from-rose-400 via-peach-400 to-amber-300 text-stone-900 border-rose-200/50 shadow-md shadow-rose-300/20';
@@ -336,20 +336,20 @@ export function TonightSection({
                   <span className="text-xs uppercase tracking-wider font-bold opacity-90">
                     Conditions Score
                   </span>
-                  <span className="text-xs px-2 py-0.5 rounded bg-black/20 border border-white/20 font-medium text-white">
+                  <span className="text-xs px-2 py-0.5 rounded bg-black/20 border border-current/20 font-medium">
                     0 — 100 Scale
                   </span>
                 </div>
                 <div className="flex items-baseline gap-2 mt-2">
-                  <span id="score-number" className="text-5xl sm:text-6xl font-extrabold tracking-tight font-mono text-white">
+                  <span id="score-number" className="text-5xl sm:text-6xl font-extrabold tracking-tight font-mono">
                     {currentSpot.score}
                   </span>
-                  <span className="text-lg font-semibold opacity-85 text-white">/ 100</span>
+                  <span className="text-lg font-semibold opacity-85">/ 100</span>
                 </div>
               </div>
 
-              <div className="mt-4 pt-4 border-t border-white/20">
-                <p id="plain-english-verdict" className="text-sm sm:text-base font-bold leading-snug text-white drop-shadow-sm">
+              <div className="mt-4 pt-4 border-t border-current/20">
+                <p id="plain-english-verdict" className="text-sm sm:text-base font-bold leading-snug drop-shadow-sm">
                   {getVerdict(currentSpot.score)}
                 </p>
               </div>
