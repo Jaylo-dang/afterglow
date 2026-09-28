@@ -15,6 +15,7 @@ interface NasaSectionProps {
 }
 
 export function NasaSection({ mode = 'sunset', data, loading, errorState, onRetry }: NasaSectionProps) {
+  const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
@@ -23,10 +24,10 @@ export function NasaSection({ mode = 'sunset', data, loading, errorState, onRetr
       className="bg-white/95 border border-stone-200/80 rounded-2xl p-6 sm:p-8 shadow-xl shadow-stone-200/60 backdrop-blur-sm mt-8 transition-colors duration-400"
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-stone-200 pb-5 mb-6">
-        <div className="flex items-center gap-2.5">
+      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${isOpen ? 'border-b border-stone-200 pb-5 mb-6' : ''}`}>
+        <div className="flex items-start gap-2.5">
           <Sparkles
-            className={`w-5 h-5 transition-colors duration-400 ${
+            className={`w-5 h-5 shrink-0 mt-0.5 transition-colors duration-400 ${
               mode === 'sunset' ? 'text-orange-600' : 'text-rose-500'
             }`}
           />
@@ -34,17 +35,29 @@ export function NasaSection({ mode = 'sunset', data, loading, errorState, onRetr
             <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-stone-900">
               Tonight's sky, from NASA
             </h2>
-            <p className="text-xs sm:text-sm text-stone-600 mt-0.5 font-medium">
-              Astronomy Picture of the Day (APOD)
+            <p className="text-xs sm:text-sm text-stone-600 mt-1 font-normal">
+              Astronomy Picture of the Day (APOD) — Celestial inspiration rather than forecast data, and not part of tonight's recommendation.
             </p>
           </div>
         </div>
 
-        {data?.date && !loading && (
-          <span className="text-xs font-mono bg-stone-100 text-stone-700 border border-stone-300 font-semibold px-2.5 py-1 rounded-full">
-            {data.date}
-          </span>
-        )}
+        <div className="flex items-center gap-2.5 self-start sm:self-center shrink-0">
+          {data?.date && !loading && (
+            <span className="text-xs font-mono bg-stone-100 text-stone-700 border border-stone-300 font-semibold px-2.5 py-1 rounded-full">
+              {data.date}
+            </span>
+          )}
+          {!loading && errorState.type === 'none' && data && (
+            <button
+              id="nasa-section-toggle"
+              type="button"
+              onClick={() => setIsOpen(!isOpen)}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-stone-300 bg-stone-100 hover:bg-stone-200/80 text-stone-800 transition-colors shadow-sm"
+            >
+              {isOpen ? 'Collapse' : 'Expand'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Case A: Loading */}
@@ -106,7 +119,7 @@ export function NasaSection({ mode = 'sunset', data, loading, errorState, onRetr
       )}
 
       {/* Main Success Content */}
-      {!loading && errorState.type === 'none' && data && (
+      {isOpen && !loading && errorState.type === 'none' && data && (
         <div id="nasa-content-card" className="space-y-5">
           {/* Title */}
           <div>
