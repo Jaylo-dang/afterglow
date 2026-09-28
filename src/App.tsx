@@ -86,18 +86,19 @@ export default function App() {
 
       // Non-2xx response handling
       if (!res.ok) {
-        let errJson;
+        let errJson: any = null;
         try {
           errJson = await res.json();
         } catch {
-          errJson = { message: res.statusText };
+          errJson = null;
         }
         const refSuffix = errJson?.reference ? ` [Ref: ${errJson.reference}]` : '';
+        const statusPart = res.status ? ` (HTTP ${res.status})` : '';
         setWeatherError({
           type: 'upstreamRefused',
-          message: errJson.message
+          message: errJson?.message
             ? `${errJson.message}${refSuffix}`
-            : `Open-Meteo returned HTTP ${res.status}: ${res.statusText}. Conditions cannot be calculated right now.${refSuffix}`,
+            : `The request for tonight's conditions did not succeed${statusPart}. Conditions cannot be calculated right now.${refSuffix}`,
         });
         setWeatherLoading(false);
         return;
