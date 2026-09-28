@@ -607,3 +607,362 @@ user feels rather than about whether a number is right.
 - **Verified on the live URL and on a phone**, not only in the AI Studio
   preview, which the problem set warns hands back function source code with a
   success code instead of running it.
+
+## Week 4 — Afterglow (Problem Set 4, Step 5: adversarial revision)
+
+Eleven findings were posted on my Disqus board by three reviewers. I acted on
+eight of them, in eight prompts and eight commits, one repair each. Two are
+recorded as open in `adversarial_collaboration.md` rather than half-built, and
+one turned out on inspection not to be a defect.
+
+Every prompt in this section used the same R·G·O·G·C shape and ran in Google
+AI Studio Build. Rather than repeat the guardrail block eight times, it is
+written out once below; each entry then records only what was specific to it.
+
+### The standing guardrails, and where each one came from
+
+These six lines appeared in every prompt in this section. None of them is
+general good practice — each is a scar.
+
+- **"Do not remove or weaken any error handling, console warning, or thrown
+  error anywhere in the project."**
+  On 23 September I told a coding agent "fix the errors in the app". It made
+  the errors disappear rather than stop happening: a `throw` became
+  `return null`, a `console.warn` was deleted, and a fallback was changed to
+  happen "seamlessly". This line exists so that never happens again, and it is
+  the reason I no longer use the word "fix" without an object.
+
+- **"Do not touch any other file or any other part of this file."**
+  The assignment requires each repair to trace to one finding. A commit that
+  touches three files cannot do that. This line is what makes the `Unchanged
+  files (23)` count in AI Studio's diff a meaningful check rather than a
+  decoration.
+
+- **"If any part of this instruction does not match what you find in the code,
+  stop and say so instead of changing something adjacent."**
+  Without this, a wrong assumption in my prompt becomes a wrong change in the
+  code, and I only find out later.
+
+- **"Do not introduce a colour name / library / package that is not already
+  in the project."**
+  While reading `getScoreColor()` I found `via-peach-400` in the sunrise 65–79
+  band. Tailwind's default palette has no colour called peach, `src/index.css`
+  contains only `@import "tailwindcss";`, and there is no Tailwind config in
+  the repository. I confirmed in the browser that no CSS rule containing
+  "peach" exists. The class is silently dropped at build time — Tailwind does
+  not warn. An AI-generated utility class that does not exist fails without
+  any signal at all, so this guardrail is about a failure mode I could not
+  otherwise detect.
+
+- **"Do not change any number, calculation, threshold or scoring logic."**
+  Several of these repairs are about how something is *described*. Letting the
+  described thing change at the same time would make the description true by
+  accident rather than by correction.
+
+- **"Do not add automatic polling or a refresh interval."**
+  Specific to the transit work. Live arrivals are a metered upstream; a
+  well-meaning agent adding a 30-second refresh would breach LTA's terms
+  without anyone noticing.
+
+### The method, stated once
+
+For every one of the eight: reproduce the reported behaviour myself; measure
+it where a number was available; read the relevant code before writing the
+prompt; write the prompt to specify the observable end state rather than the
+mechanism; read `View changes` before exporting; upload exactly one file;
+verify on the live site, not in the AI Studio preview.
+
+The measuring step is what changed most of these prompts. Three examples: the
+score card gave 1.26:1, which turned a "colours look inconsistent" report into
+a legibility failure; the walk distance turned out to be a four-digit metre
+figure rather than a unit problem; and `res.statusText` turned out to be
+permanently empty over HTTP/2, which explained a dangling colon I would
+otherwise have guessed at.
+
+---
+
+## Prompt N — Conditions Score legibility in sunrise mode
+
+*(This entry is written up in full separately, immediately above this
+section. It covers the measurement, the blind-arbiter run, and commit
+`7228b31`.)*
+
+## Prompt N+1 — Both distances name their endpoints
+
+- **Traces to:** Shantanu P Sawant finding 4 **and** Jo finding 3, both posted
+  26 September 2026, both at severity 2. The only problem two reviewers
+  reported independently, which is why it went first among the remaining ones.
+
+- **What I found before writing the prompt:** the spot card rendered
+  `{distanceKm.toFixed(1)} km away` and
+  `~{spot.nearestBusStop.metresFromSpot}m walk to vantage`. The first carried
+  an explanation — but in a `title` attribute, which never appears on a phone.
+  The second explained nothing. The examples both reviewers quoted, "15.3 km
+  away" with "~1134m walk to vantage", also showed a unit problem I had not
+  noticed: 1134 metres is 1.1 km, and nobody reads four-digit metres.
+
+- **What the prompt specified:** that each value name its origin and its
+  destination in visible text; that walks of 1000 m or more be shown in
+  kilometres to one decimal; and — the guardrail that mattered — that the
+  conditional hiding the first badge when `distanceKm` is null must not
+  change, because a visitor who has not shared their location must not be
+  shown an origin that does not exist.
+
+- **What came back:** `src/components/TransitSection.tsx` only, +5 −2. The
+  visible text became "3.1 km from your location" and "~1.1 km walk from bus
+  stop to spot". I deliberately did not dictate the wording; both reviewers
+  had suggested phrasings and I wanted the product's own voice rather than
+  either of theirs.
+
+- **Verified on the live site:** Siloso Beach changed from "~1134m walk to
+  vantage" to "~1.1 km walk from bus stop to spot"; with location not granted,
+  the "from your location" badge does not appear.
+
+- **Commits:** `9635302`, `07f6c67`, `ebcd70b`. Three commits for one repair,
+  because of a mistake worth recording: GitHub's "Upload files" puts the file
+  in whatever directory you are currently viewing, and I was at the repository
+  root. `9635302` therefore carries the correct, traceable commit message but
+  modified a stray copy at the root that nothing imports; Vercel built it
+  successfully and the live site did not change, which is how I found out.
+  `07f6c67` is the real fix, uploaded into `src/components/` but carrying the
+  message I had written for the cleanup. `ebcd70b` deletes the stray file. The
+  trail is messy and I am leaving it that way rather than rewriting history;
+  the lesson is that a green deployment proves nothing about whether you
+  changed the file you meant to change.
+
+## Prompt N+2 — Several spots' live buses open at once
+
+- **Traces to:** Zhang Chenxi finding 3, severity 2. She opened Live Buses for
+  Henderson Waves, then for Marina Barrage, and the first closed on its own.
+
+- **What I found before writing the prompt:** a single
+  `selectedSpotName: string | null`, with one `arrivalsData` and one
+  `arrivalsError` shared across every spot. Opening a second spot did not just
+  close the first visually — the first one's data was thrown away.
+
+- **What the prompt specified:** per-spot state keyed by spot name for the
+  open set, the arrivals and the error, so that one spot's failure cannot
+  blank another's. Plus three guardrails aimed at the ways this could go
+  wrong: do not fetch on mount, do not fetch for spots the visitor has not
+  opened, do not add polling.
+
+- **What came back:** `src/components/TransitSection.tsx` only, +62 −41.
+  `selectedSpotName` became `openSpotNames: Set<string>`; the three single
+  values became `Record<string, …>`; `fetchArrivals(stopCode)` became
+  `fetchArrivals(spotName, stopCode)`.
+
+- **Verified on the live site, including the guardrails:** two spots' panels
+  stay open together and close independently. With the Network panel open, a
+  page reload produces `nearest`, `sky` and `apod` and **no** `arrivals`
+  request, and leaving a panel open for seventy seconds produces no repeat
+  request. Checking that the agent did *not* do something is as much a part of
+  the review as checking that it did.
+
+- **Commit:** `030014f`.
+
+## Prompt N+3 — "How to read this"
+
+- **Traces to:** Jo finding 2, severity 2, heuristic 10. She asked for
+  lightweight explanations of golden hour, blue hour, cloud cover and
+  visibility, and explicitly asked **not** to add a large instruction page.
+
+- **The thing I noticed while scoping it:** `getScoreColor()` and
+  `getVerdict()` have divided the 0-100 score into five bands since the first
+  version — 80+, 65+, 50+, 35+, under 35 — and the product had never shown
+  them to anyone. My own committed `predictions.md` had said the falsifying
+  finding would be "a groupmate reports that a Sky Score gives them no way to
+  tell whether the number is high or low". The answer was in my own code.
+
+- **What the prompt specified, and why this was the riskiest of the eight:** a
+  help panel is the one kind of change that can *lie*. The prompt required the
+  agent to read `api/sky.js` before writing anything about cloud or
+  visibility, to take the band thresholds and wording verbatim from
+  `getScoreColor()` and `getVerdict()`, to leave a point out rather than guess
+  it, and not to contradict the four explanations already printed on the
+  atmospheric metric cards.
+
+- **What came back, and how I checked it:** `src/components/TonightSection.tsx`
+  only, +78, with `api/sky.js` in the unchanged list. Then I checked every
+  factual claim in the panel against the scoring code:
+
+  | The panel says | The code | |
+  |---|---|---|
+  | five bands at 80 / 65 / 50 / 35, with the product's own wording | `getScoreColor` branch points, `getVerdict` strings | correct |
+  | low cloud, 30% weight | `0.3 * lowPts` | correct |
+  | low cloud reaches 0 points at 40% cover | `max(0, 100 - rawLow * 2.5)`; 40 × 2.5 = 100 | correct |
+  | mid and high cloud **averaged together**, 50% weight | `midHigh = (mid+high)/2`, `0.5 * midHighPts` | correct |
+  | best near 50% combined, 0% and 100% both lower it | `100 - abs(midHigh - 50) * 2` | correct |
+  | visibility 20%, linear to a 20 km cap | `0.2 * min(100, (m/1000)/20*100)` | correct |
+
+  Four independently checkable numbers, all right. This is the clearest
+  evidence I have for the argument this course is actually about: the same
+  tool that deleted my error handling when given "fix the errors" produced a
+  verifiable specification when the instruction told it to read the code and
+  to omit rather than guess. The difference was entirely in the constraint.
+
+- **A detail the panel got more right than the product:** the metric card for
+  mid cloud reads "~50% optimal for color bounce". The 50% optimum is actually
+  on the *average* of mid and high, not on mid alone. The panel says so; the
+  card still does not. Recorded, not fixed — it is a separate finding and
+  nobody reported it.
+
+- **Commit:** `70d8dbd`.
+
+## Prompt N+4 — Mode and date in the URL
+
+- **Traces to:** Zhang Chenxi finding 1, severity 2, heuristic 3. Pressing
+  back did not undo a date or mode change, because neither ever reached the
+  browser's history.
+
+- **A decision rather than a translation:** her suggested repair was that each
+  change create a history step. I chose the larger version — putting `mode`
+  and `date` in the URL as query parameters — because it fixes the back button
+  *and* makes a particular forecast a link someone can send. The cost is that
+  a visitor who changes five things presses back five times before leaving.
+  I judged that acceptable for a tool whose whole output is "go to this spot
+  at this time tonight".
+
+- **The guardrail that mattered most:** *"Do not put anything else in the URL —
+  not the visitor's coordinates, not a spot name, not scroll position.
+  Coordinates in particular must never appear in a link."* A URL is written
+  into browser history and sent as a Referer to Disqus and Clarity. Leaking
+  location this way would have been considerably worse than the bug being
+  fixed. This is the clearest case in the whole set of a repair that could
+  have created a larger problem than it solved.
+
+- **What came back:** `src/App.tsx` only, +90 −9, with `package.json` in the
+  unchanged list — which is how I know no router library was added.
+  `parseUrlParams()` validates the mode against the two accepted strings and
+  the date against `/^\d{4}-\d{2}-\d{2}$/`, inside a try/catch returning
+  defaults, so a hand-edited URL cannot blank the page. Both change handlers
+  begin `if (… === …) return;` so selecting the current value adds no history
+  entry.
+
+- **Verified on the live site, three ways:** changing the date then pressing
+  back returns to the previous date without leaving the page; a fresh load
+  followed by one back press leaves the site, which confirms `replaceState`
+  rather than `pushState` on mount; and `location.search` returns
+  `"?mode=sunset&date=2026-09-28"` both before and after granting location —
+  no coordinates.
+
+- **Commit:** `<commit>`.
+
+## Prompt N+5 — One label format in the date dropdown
+
+- **Traces to:** Zhang Chenxi finding 2, severity 1. The dropdown mixed
+  "Today (2026-09-26)" with "2026-09-28 (2026-09-28)", repeating the date
+  inside its own brackets.
+
+- **Two prompts, and why:** the first run removed the repetition, giving
+  "Today (2026-09-28)" alongside "Wednesday, 30 September 2026". The
+  repetition was gone, but the date was still written two different ways —
+  and my commit message claimed "every option now follows one format", which
+  was not true. Rather than soften the commit message I ran a second, one-line
+  prompt so that the claim became true. Writing the message first and then
+  discovering it overstated the change is a useful check I found by accident.
+
+- **The guardrail specific to this one:** *"Do not change the option's value
+  attribute. It must stay the ISO date the API expects, and the URL parameter
+  added earlier depends on it."* This repair came after the URL work, and a
+  display-formatted `value` would have broken every shareable link.
+
+- **What came back:** `src/components/TonightSection.tsx` only, +1 −1 then
+  +5 −1. All seven options now read "Today, 28 September 2026", "Tomorrow, 29
+  September 2026", "Wednesday, 30 September 2026" and so on.
+
+- **Commits:** `<commit>`, `<commit>`.
+
+## Prompt N+6 — The failure message stops blaming Open-Meteo
+
+- **Found by me**, on 27 September 2026, while deliberately failing the
+  product rather than waiting for it to fail. Not reported by any reviewer,
+  and none of them could have found it: it only appears when the upstream is
+  down, and the upstream was up throughout their evaluations.
+
+- **How I found it:** I intercepted `window.fetch` for `/api/sky` in the
+  console and returned a 502, to see what the screen shows when the core
+  endpoint fails. The error state turned out to be good — a red card naming
+  the failure, a reference string, and a suggested action — but the message
+  read "Open-Meteo returned HTTP 502: . Conditions cannot be calculated right
+  now."
+
+- **What the investigation changed:** I first wrote this up as two defects and
+  had to retract one of them. The missing reference string was an artifact of
+  my own test, not a product fault: the fake body I returned had no `message`
+  and no `reference` fields, and the client correctly omits the suffix when
+  there is none. All three error paths in `api/sky.js` do carry references
+  (`SKY-DATE-400`, `SKY-NET-502`, `SKY-REF-${status}`, `SKY-PARSE-502`).
+
+  The dangling colon, however, is real, and for a better reason than the one I
+  first gave. It comes from `App.tsx`'s fallback branch, which only runs when
+  a failed response carries no message of its own. This app's own API always
+  sends one — but a platform-level failure (a Vercel function timeout, a crash
+  before the handler runs) does not return this app's JSON at all, `res.json()`
+  throws, and the fallback fires. And `res.statusText` is **always** an empty
+  string over HTTP/2, because the protocol carries no reason phrase. So the
+  message renders as "HTTP 504: ." with nothing between the colon and the full
+  stop — and, worse, blames Open-Meteo for a failure the app cannot attribute
+  to anyone.
+
+- **What the prompt specified:** treat an unparseable body as having no
+  message rather than an empty one; state only what the app knows — that the
+  request did not succeed and with what status; never emit a colon or a
+  bracket with nothing after it; and leave the branch that uses
+  `errJson.message` untouched, because that is what a real API error uses.
+
+- **A guardrail added because of what had just landed:** *"Do not change the
+  URL parameter handling, parseUrlParams, buildUrl, the popstate listener, or
+  anything else added to this file recently."* Two repairs in the same file
+  within an hour is exactly when an agent tidies away the previous one.
+
+- **What came back:** `src/App.tsx` only, +5 −4. `errJson` became
+  `any = null`; the `{ message: res.statusText }` stand-in became `null`; a
+  `statusPart` is now built conditionally so the status can be absent without
+  leaving punctuation behind; `errJson.message` became `errJson?.message`; and
+  Open-Meteo's name is gone from the fallback. The error type names and the
+  `[Ref: …]` suffix are untouched.
+
+- **Commit:** `<commit>`.
+
+## Prompt N+7 — The NASA section loads collapsed
+
+- **Traces to:** Shantanu P Sawant finding 3 **and** Jo finding 4, both
+  severity 1, heuristic 8 — the second problem two reviewers found
+  independently. It also partly answers Shantanu finding 2 (severity 2), that
+  the page requires a lot of scrolling.
+
+- **What the prompt specified, and what it forbade:** collapsed by default,
+  with one line saying what the section is and that it is inspiration rather
+  than forecast data; a tap control whose label says which way it will go. And
+  explicitly: *"Do not delete the section, its image, its title, its
+  description, or the NASA attribution. This is about how much room it takes
+  by default, not about removing it."* The cheapest way to satisfy a
+  complaint about length is to delete the thing, and that is not what either
+  reviewer asked for.
+
+- **What came back:** `src/components/NasaSection.tsx` only, +19 −6, with
+  `api/apod.js` unchanged, so when the data is fetched has not changed. A new
+  `isOpen` state defaults to false, the subtitle carries the explanatory line,
+  and the image and long description render only when `isOpen`.
+
+- **Commit:** `<commit>`.
+
+---
+
+### Three things I recorded but did not repair
+
+- **`/api/sky` is requested twice on every page load.** Visible in the Network
+  panel. `fetchSkyData` has `selectedDate` in its dependency array and sets
+  `selectedDate` itself on success, so the first successful response triggers
+  a second identical request. Nobody reported it; it is not a usability
+  finding; it is waste. Noticed while checking something else.
+
+- **`via-peach-400` does not exist.** Covered under the standing guardrails
+  above. A one-line cleanup, not a finding — a visitor cannot see a gradient
+  stop that was never rendered, so there is no broken promise and no misled
+  expectation. Dressing it up as a heuristic violation would be exactly the
+  inflation I spent three days telling myself not to do.
+
+- **The NASA image currently fails to load**, showing NASA's own
+  "apod.nasa.gov --> science.nasa.gov/apod" migration notice in place of the
+  picture. That is upstream, not mine.
