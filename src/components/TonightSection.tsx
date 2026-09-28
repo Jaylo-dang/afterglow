@@ -24,6 +24,7 @@ export function TonightSection({
   selectedDate,
   onDateChange,
 }: TonightSectionProps) {
+  const [howToReadOpen, setHowToReadOpen] = useState(false);
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
   const [selectedSpotIndex, setSelectedSpotIndex] = useState<number>(0);
 
@@ -147,6 +148,21 @@ export function TonightSection({
           <p className="text-xs sm:text-sm text-stone-600 mt-1 font-normal">
             Live Singapore conditions for landscape & golden hour photographers
           </p>
+          <div className="mt-2">
+            <button
+              id="how-to-read-toggle"
+              type="button"
+              onClick={() => setHowToReadOpen(!howToReadOpen)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-600 hover:text-stone-900 bg-stone-100 hover:bg-stone-200/80 px-2.5 py-1 rounded-md border border-stone-200 transition-colors"
+            >
+              <span>How to read this</span>
+              {howToReadOpen ? (
+                <ChevronUp className="w-3.5 h-3.5 text-stone-500" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-stone-500" />
+              )}
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
@@ -207,6 +223,68 @@ export function TonightSection({
           </div>
         </div>
       </div>
+
+      {/* "How to read this" Panel */}
+      {howToReadOpen && (
+        <div
+          id="how-to-read-panel"
+          className="my-6 border border-stone-200/90 rounded-xl bg-stone-50/80 p-5 sm:p-6 shadow-sm text-xs sm:text-sm text-stone-700 space-y-4"
+        >
+          <div className="flex items-center justify-between border-b border-stone-200 pb-3">
+            <h3 className="font-bold text-stone-900 text-sm sm:text-base">
+              How to Read This Forecast
+            </h3>
+            <button
+              type="button"
+              onClick={() => setHowToReadOpen(false)}
+              className="text-stone-500 hover:text-stone-800 text-xs font-medium transition-colors"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {/* 1. Conditions Score Scale */}
+            <div>
+              <h4 className="font-bold text-stone-900 mb-1.5">1. Conditions Score Scale</h4>
+              <ul className="space-y-1 text-stone-700">
+                <li><strong className="text-stone-900">80–100:</strong> Outstanding conditions: pack your tripod and head out early.</li>
+                <li><strong className="text-stone-900">65–79:</strong> Favorable conditions: high probability of vibrant color in the sky.</li>
+                <li><strong className="text-stone-900">50–64:</strong> Moderate conditions: patchy light and decent potential for dramatic clouds.</li>
+                <li><strong className="text-stone-900">35–49:</strong> Fair conditions: overcast skies or low clouds may mute the light.</li>
+                <li><strong className="text-stone-900">&lt; 35:</strong> Poor conditions: thick cloud cover or low visibility; probably skip the tripod tonight.</li>
+              </ul>
+            </div>
+
+            {/* 2. Golden Hour and Blue Hour */}
+            <div>
+              <h4 className="font-bold text-stone-900 mb-1.5">2. Golden Hour and Blue Hour</h4>
+              <p className="leading-relaxed">
+                Golden hour brings warm, soft, golden light just after sunrise or just before sunset when the sun is low on the horizon.
+              </p>
+              <p className="leading-relaxed mt-1">
+                Blue hour brings cool, diffused, deep blue light just before sunrise or just after sunset when the sun is below the horizon.
+              </p>
+            </div>
+
+            {/* 3. Cloud Cover */}
+            <div>
+              <h4 className="font-bold text-stone-900 mb-1.5">3. Cloud Cover</h4>
+              <p className="leading-relaxed">
+                The forecast reports low, mid, and high cloud coverage separately. Low clouds hurt the score (30% weight) because lower is better to keep the horizon unblocked, reaching 0 points at 40% cover. Mid and high clouds are averaged together (50% weight), where ~50% combined coverage is optimal for color bounce and reflecting deep pinks and purples, while completely clear skies (0%) or heavy overcast (100%) lower the score.
+              </p>
+            </div>
+
+            {/* 4. Visibility */}
+            <div>
+              <h4 className="font-bold text-stone-900 mb-1.5">4. Visibility</h4>
+              <p className="leading-relaxed">
+                Visibility measures atmospheric clarity and distance of clean air, shown in kilometres (km) converted from raw metres. It contributes 20% to the overall score, scaling linearly up to a 20 km cap where it awards maximum points.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* State A: Loading */}
       {loading && (
