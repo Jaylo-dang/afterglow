@@ -584,7 +584,7 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
                           }`}
                           title="Straight-line distance from your location"
                         >
-                          {distanceKm.toFixed(1)} km away
+                          {distanceKm.toFixed(1)} km from your location
                         </span>
                       )}
 
@@ -614,7 +614,10 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
                       </span>
                       <span className="text-stone-300">•</span>
                       <span className="text-stone-500 font-medium">
-                        ~{spot.nearestBusStop.metresFromSpot}m walk to vantage
+                        {spot.nearestBusStop.metresFromSpot >= 1000
+                          ? `~${(spot.nearestBusStop.metresFromSpot / 1000).toFixed(1)} km`
+                          : `~${spot.nearestBusStop.metresFromSpot}m`}{' '}
+                        walk from bus stop to spot
                       </span>
                       {spot.nearestBusStop.source === 'built-in fallback list' ? (
                         <>
