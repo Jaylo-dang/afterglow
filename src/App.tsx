@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Mode, SkyApiResponse, ApodApiResponse } from './types';
 import { TonightSection } from './components/TonightSection';
 import { TransitSection } from './components/TransitSection';
@@ -7,10 +7,51 @@ import { DisqusComments } from './components/DisqusComments';
 import { Footer } from './components/Footer';
 import { Camera } from 'lucide-react';
 
+function parseUrlParams(): { mode: Mode; date: string } {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const rawMode = params.get('mode');
+    const rawDate = params.get('date');
+
+    const mode: Mode = rawMode === 'sunrise' || rawMode === 'sunset' ? rawMode : 'sunset';
+    const date: string = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : '';
+
+    return { mode, date };
+  } catch {
+    return { mode: 'sunset', date: '' };
+  }
+}
+
+function buildUrl(targetMode: Mode, targetDate?: string): string {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('mode', targetMode);
+    if (targetDate) {
+      url.searchParams.set('date', targetDate);
+    } else {
+      url.searchParams.delete('date');
+    }
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return targetDate ? `?mode=${targetMode}&date=${targetDate}` : `?mode=${targetMode}`;
+  }
+}
+
 export default function App() {
-  // Mode toggle: Sunset selected by default
-  const [mode, setMode] = useState<Mode>('sunset');
-  const [selectedDate, setSelectedDate] = useState<string>('');
+  // Read initial forecast mode and selected date from URL query parameters
+  const [mode, setMode] = useState<Mode>(() => parseUrlParams().mode);
+  const [selectedDate, setSelectedDate] = useState<string>(() => parseUrlParams().date);
+
+  const currentModeRef = useRef<Mode>(mode);
+  const currentDateRef = useRef<string>(selectedDate);
+
+  useEffect(() => {
+    currentModeRef.current = mode;
+  }, [mode]);
+
+  useEffect(() => {
+    currentDateRef.current = selectedDate;
+  }, [selectedDate]);
 
   // Weather section independent state
   const [weatherData, setWeatherData] = useState<SkyApiResponse | null>(null);
@@ -72,8 +113,14 @@ export default function App() {
         });
       } else {
         setWeatherData(json);
-        if (!selectedDate && json.date) {
+        if (!dateQuery && json.date) {
           setSelectedDate(json.date);
+          currentDateRef.current = json.date;
+          window.history.replaceState(
+            { mode: targetMode, date: json.date },
+            '',
+            buildUrl(targetMode, json.date)
+          );
         }
       }
     } catch (networkErr: any) {
@@ -85,7 +132,7 @@ export default function App() {
     } finally {
       setWeatherLoading(false);
     }
-  }, [selectedDate]);
+  }, []);
 
   // Fetch NASA APOD data from /api/apod
   const fetchNasaData = useCallback(async () => {
@@ -135,21 +182,55 @@ export default function App() {
     }
   }, []);
 
-  // Initial load
+  // First load: replace current history entry instead of adding one, and trigger initial fetch
   useEffect(() => {
-    fetchSkyData(mode, selectedDate || undefined);
-  }, [mode, selectedDate, fetchSkyData]);
+    const { mode: initialMode, date: initialDate } = parseUrlParams();
+    window.history.replaceState(
+      { mode: initialMode, date: initialDate },
+      '',
+      buildUrl(initialMode, initialDate)
+    );
+    fetchSkyData(initialMode, initialDate || undefined);
+  }, [fetchSkyData]);
+
+  // Handle browser back and forward button navigation (popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+      const { mode: popMode, date: popDate } = parseUrlParams();
+      if (popMode === currentModeRef.current && popDate === currentDateRef.current) {
+        return;
+      }
+      setMode(popMode);
+      setSelectedDate(popDate);
+      currentModeRef.current = popMode;
+      currentDateRef.current = popDate;
+      fetchSkyData(popMode, popDate || undefined);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [fetchSkyData]);
 
   useEffect(() => {
     fetchNasaData();
   }, [fetchNasaData]);
 
   const handleModeChange = (newMode: Mode) => {
+    if (newMode === mode) return;
     setMode(newMode);
+    currentModeRef.current = newMode;
+    window.history.pushState({ mode: newMode, date: selectedDate }, '', buildUrl(newMode, selectedDate));
+    fetchSkyData(newMode, selectedDate || undefined);
   };
 
   const handleDateChange = (date: string) => {
+    if (date === selectedDate) return;
     setSelectedDate(date);
+    currentDateRef.current = date;
+    window.history.pushState({ mode, date }, '', buildUrl(mode, date));
+    fetchSkyData(mode, date || undefined);
   };
 
   return (
