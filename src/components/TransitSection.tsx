@@ -70,17 +70,22 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
     setShowOppositeFacing(false);
   }, [mode]);
 
-  // Expanded spot for live arrivals inspection
-  const [selectedSpotName, setSelectedSpotName] = useState<string | null>(null);
+  // Expanded spots for live arrivals inspection (one entry per open spot)
+  const [openSpotNames, setOpenSpotNames] = useState<Set<string>>(() => new Set());
 
-  // Live arrivals state per bus stop
-  const [arrivalsLoading, setArrivalsLoading] = useState<boolean>(false);
-  const [arrivalsData, setArrivalsData] = useState<ArrivalsApiResponse | null>(null);
-  const [arrivalsError, setArrivalsError] = useState<{
-    status?: number;
-    reference?: string;
-    message: string;
-  } | null>(null);
+  // Live arrivals state per spot
+  const [arrivalsLoading, setArrivalsLoading] = useState<Record<string, boolean>>({});
+  const [arrivalsData, setArrivalsData] = useState<Record<string, ArrivalsApiResponse | null>>({});
+  const [arrivalsError, setArrivalsError] = useState<
+    Record<
+      string,
+      {
+        status?: number;
+        reference?: string;
+        message: string;
+      } | null
+    >
+  >({});
 
   // Fetch nearest spots (with or without user coordinates)
   const fetchSpots = async (coords?: { lat: number; lon: number } | null) => {
@@ -210,11 +215,11 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
   const displayedSpots = showOppositeFacing ? searchFilteredSpots : matchingFacingSpots;
   const hiddenCount = oppositeFacingSpots.length;
 
-  // Fetch live bus arrivals for a stop code
-  const fetchArrivals = async (stopCode: string) => {
-    setArrivalsLoading(true);
-    setArrivalsError(null);
-    setArrivalsData(null);
+  // Fetch live bus arrivals for a spot
+  const fetchArrivals = async (spotName: string, stopCode: string) => {
+    setArrivalsLoading((prev) => ({ ...prev, [spotName]: true }));
+    setArrivalsError((prev) => ({ ...prev, [spotName]: null }));
+    setArrivalsData((prev) => ({ ...prev, [spotName]: null }));
     try {
       const res = await fetch(`/api/arrivals?stopCode=${encodeURIComponent(stopCode)}`, {
         cache: 'no-store'
@@ -222,34 +227,47 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
       const data: ArrivalsApiResponse = await res.json();
 
       if (!res.ok) {
-        setArrivalsError({
-          status: res.status,
-          reference: data.reference || `REF-${res.status}`,
-          message: data.message || 'Live bus arrivals could not be loaded.'
-        });
+        setArrivalsError((prev) => ({
+          ...prev,
+          [spotName]: {
+            status: res.status,
+            reference: data.reference || `REF-${res.status}`,
+            message: data.message || 'Live bus arrivals could not be loaded.'
+          }
+        }));
       } else {
-        setArrivalsData(data);
+        setArrivalsData((prev) => ({ ...prev, [spotName]: data }));
       }
     } catch {
-      setArrivalsError({
-        status: 502,
-        reference: 'NET-502',
-        message: 'LTA DataMall service could not be reached.'
-      });
+      setArrivalsError((prev) => ({
+        ...prev,
+        [spotName]: {
+          status: 502,
+          reference: 'NET-502',
+          message: 'LTA DataMall service could not be reached.'
+        }
+      }));
     } finally {
-      setArrivalsLoading(false);
+      setArrivalsLoading((prev) => ({ ...prev, [spotName]: false }));
     }
   };
 
   // Toggle spot expansion
   const handleToggleSpot = (spot: NearestSpotItem) => {
-    if (selectedSpotName === spot.name) {
-      setSelectedSpotName(null);
-      setArrivalsData(null);
-      setArrivalsError(null);
+    const isCurrentlyOpen = openSpotNames.has(spot.name);
+    if (isCurrentlyOpen) {
+      setOpenSpotNames((prev) => {
+        const next = new Set(prev);
+        next.delete(spot.name);
+        return next;
+      });
     } else {
-      setSelectedSpotName(spot.name);
-      fetchArrivals(spot.nearestBusStop.code);
+      setOpenSpotNames((prev) => {
+        const next = new Set(prev);
+        next.add(spot.name);
+        return next;
+      });
+      fetchArrivals(spot.name, spot.nearestBusStop.code);
     }
   };
 
@@ -527,7 +545,10 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
       {!spotsLoading && !spotsError && (
         <div className="space-y-4">
           {displayedSpots.map((spot, index) => {
-            const isExpanded = selectedSpotName === spot.name;
+            const isExpanded = openSpotNames.has(spot.name);
+            const spotArrivalsLoading = Boolean(arrivalsLoading[spot.name]);
+            const spotArrivalsData = arrivalsData[spot.name] || null;
+            const spotArrivalsError = arrivalsError[spot.name] || null;
             const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lon}&travelmode=transit`;
             const distanceKm = getSpotDistanceKm(spot);
 
@@ -686,26 +707,26 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
                           </h4>
                           <button
                             type="button"
-                            onClick={() => fetchArrivals(spot.nearestBusStop.code)}
-                            disabled={arrivalsLoading}
+                            onClick={() => fetchArrivals(spot.name, spot.nearestBusStop.code)}
+                            disabled={spotArrivalsLoading}
                             title="Refresh arrivals"
                             className="text-stone-500 hover:text-stone-800 transition-colors p-1"
                           >
                             <RefreshCw
-                              className={`w-3.5 h-3.5 ${arrivalsLoading ? 'animate-spin' : ''}`}
+                              className={`w-3.5 h-3.5 ${spotArrivalsLoading ? 'animate-spin' : ''}`}
                             />
                           </button>
                         </div>
-                        {arrivalsData?.fetchedAt && (
+                        {spotArrivalsData?.fetchedAt && (
                           <p className="text-[11px] text-stone-500 mt-0.5">
-                            As of {formatFriendlyTime(arrivalsData.fetchedAt)} • Source: {arrivalsData.source || 'LTA DataMall'}
+                            As of {formatFriendlyTime(spotArrivalsData.fetchedAt)} • Source: {spotArrivalsData.source || 'LTA DataMall'}
                           </p>
                         )}
                       </div>
                     </div>
 
                     {/* State: Loading Arrivals */}
-                    {arrivalsLoading && (
+                    {spotArrivalsLoading && (
                       <div className="py-8 text-center">
                         <div
                           className={`inline-block w-6 h-6 border-2 rounded-full animate-spin mb-2 ${
@@ -721,13 +742,13 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
                     )}
 
                     {/* State: Arrivals Unavailable / Upstream Error */}
-                    {!arrivalsLoading && arrivalsError && (
+                    {!spotArrivalsLoading && spotArrivalsError && (
                       <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs sm:text-sm">
                         <div className="flex items-center gap-2 font-bold mb-1">
                           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                          <span>Arrivals Unavailable (Ref: {arrivalsError.reference})</span>
+                          <span>Arrivals Unavailable (Ref: {spotArrivalsError.reference})</span>
                         </div>
-                        <p>{arrivalsError.message}</p>
+                        <p>{spotArrivalsError.message}</p>
                         <p className="text-xs text-stone-600 mt-2">
                           You can still tap &ldquo;Directions&rdquo; above to view full Google Maps transit route options.
                         </p>
@@ -735,7 +756,7 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
                     )}
 
                     {/* State: No Buses Due (200 with empty list flag) */}
-                    {!arrivalsLoading && !arrivalsError && arrivalsData?.noBusesDue && (
+                    {!spotArrivalsLoading && !spotArrivalsError && spotArrivalsData?.noBusesDue && (
                       <div className="p-4 rounded-xl bg-stone-100 border border-stone-200 text-center text-xs sm:text-sm text-stone-700">
                         <p className="font-semibold text-stone-900">
                           No buses currently scheduled or operating at this stop.
@@ -747,13 +768,13 @@ export function TransitSection({ mode, forecastSpots, selectedDate }: TransitSec
                     )}
 
                     {/* State: Live Services List */}
-                    {!arrivalsLoading &&
-                      !arrivalsError &&
-                      arrivalsData &&
-                      !arrivalsData.noBusesDue &&
-                      (arrivalsData.services || []).length > 0 && (
+                    {!spotArrivalsLoading &&
+                      !spotArrivalsError &&
+                      spotArrivalsData &&
+                      !spotArrivalsData.noBusesDue &&
+                      (spotArrivalsData.services || []).length > 0 && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {arrivalsData.services!.map((svc) => (
+                          {spotArrivalsData.services!.map((svc) => (
                             <div
                               key={svc.serviceNo}
                               className="bg-white border border-stone-200 rounded-xl p-3.5 shadow-sm flex flex-col justify-between"
