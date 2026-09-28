@@ -177,7 +177,7 @@ export function TonightSection({
             >
               {data.availableDates.map((d, i) => (
                 <option key={d} value={d}>
-                  {i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d} ({d})
+                  {i === 0 ? `Today (${d})` : i === 1 ? `Tomorrow (${d})` : formatDisplayDate(d)}
                 </option>
               ))}
             </select>
